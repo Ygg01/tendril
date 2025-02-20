@@ -139,7 +139,7 @@ where
     #[inline]
     pub fn new(inner_sink: Sink) -> Self {
         Utf8LossyDecoder {
-            inner_sink: inner_sink,
+            inner_sink,
             incomplete: None,
             marker: PhantomData,
         }
@@ -605,7 +605,7 @@ mod test {
     #[cfg(any(feature = "encoding", feature = "encoding_rs"))]
     pub type Tests = &'static [(&'static [&'static [u8]], &'static str, usize)];
 
-    #[cfg(any(feature = "encoding"))]
+    #[cfg(feature = "encoding")]
     const ASCII: Tests = &[
         (&[], "", 0),
         (&[b""], "", 0),

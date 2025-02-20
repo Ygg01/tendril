@@ -6,7 +6,6 @@
 
 use crate::fmt;
 use crate::tendril::{Atomicity, Tendril};
-use utf8;
 
 pub struct IncompleteUtf8(utf8::Incomplete);
 
@@ -82,16 +81,15 @@ impl IncompleteUtf8 {
         A: Atomicity,
         F: FnMut(Tendril<fmt::UTF8, A>),
     {
-        let resume_at;
-        match self.0.try_complete(&input) {
+        let resume_at= match self.0.try_complete(&input) {
             None => return Err(()),
             Some((result, rest)) => {
                 push_utf8(Tendril::from_slice(
                     result.unwrap_or(utf8::REPLACEMENT_CHARACTER),
                 ));
-                resume_at = input.len() - rest.len();
+                input.len() - rest.len()
             }
-        }
+        };
         input.pop_front(resume_at as u32);
         Ok(input)
     }

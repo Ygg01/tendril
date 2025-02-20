@@ -6,7 +6,7 @@
 
 //! Provides an unsafe owned buffer type, used in implementing `Tendril`.
 
-use std::{mem, ptr, slice, u32};
+use std::{mem, ptr, slice};
 
 use crate::OFLOW;
 
@@ -44,9 +44,9 @@ impl<H> Buf32<H> {
         ptr::write(ptr, h);
 
         Buf32 {
-            ptr: ptr,
+            ptr,
             len: 0,
-            cap: cap,
+            cap,
         }
     }
 
@@ -61,7 +61,7 @@ impl<H> Buf32<H> {
 
     #[inline(always)]
     pub unsafe fn data_ptr(&self) -> *mut u8 {
-        (self.ptr as *mut u8).offset(mem::size_of::<H>() as isize)
+        (self.ptr as *mut u8).add(size_of::<H>())
     }
 
     #[inline(always)]

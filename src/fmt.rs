@@ -89,6 +89,9 @@ pub mod imp {
 ///
 /// The type implementing this trait is usually not instantiated.
 /// It's used with a phantom type parameter of `Tendril`.
+/// 
+/// # Safety
+/// Wrong casting of bytes to str may cause undefined behavior.
 pub unsafe trait Format {
     /// Check whether the buffer is valid for this format.
     fn validate(buf: &[u8]) -> bool;
@@ -123,6 +126,8 @@ pub unsafe trait Format {
     ///
     /// The default is to do nothing.
     ///
+    /// # Safety
+    /// 
     /// The function is `unsafe` because it may assume the input
     /// buffers are already valid for the format. Also, no
     /// bounds-checking is performed on the return value!
@@ -136,6 +141,9 @@ pub unsafe trait Format {
 ///
 /// The subset format can be converted to the superset format
 /// for free.
+/// 
+/// # Safety
+/// Inherits safety concerns from [`Format`]
 pub unsafe trait SubsetOf<Super>: Format
 where
     Super: Format,
@@ -154,20 +162,29 @@ where
 
 /// Indicates a format which corresponds to a Rust slice type,
 /// representing exactly the same invariants.
+/// 
+/// # Safety
+/// Inherits safety constraints from [`Format`]
 pub unsafe trait SliceFormat: Format + Sized {
     type Slice: ?Sized + Slice;
 }
 
 /// Indicates a format which contains characters from Unicode
 /// (all of it, or some proper subset).
+/// 
+/// # Safety
+/// 
+/// Changing format without validation will cause unsoundness.
 pub unsafe trait CharFormat<'a>: Format {
     /// Iterator for characters and their byte indices.
     type Iter: Iterator<Item = (usize, char)>;
 
     /// Iterate over the characters of the string and their byte
     /// indices.
-    ///
-    /// You may assume the buffer is *already validated* for `Format`.
+    /// 
+    /// # Safety 
+    /// 
+    /// It assumes the buffer is *already validated* for `Format`.
     unsafe fn char_indices(buf: &'a [u8]) -> Self::Iter;
 
     /// Encode the character as bytes and pass them to a continuation.
@@ -178,21 +195,25 @@ pub unsafe trait CharFormat<'a>: Format {
         F: FnOnce(&[u8]);
 }
 
-/// Indicates a Rust slice type that is represented in memory as bytes.
+/// Indicates a Rust slice type represented in memory as bytes.
+/// 
+/// # Safety
+/// 
+/// It manipulates raw data and may transmute a non-UTF [`&[u8]`] into [`str`]
 pub unsafe trait Slice {
     /// Access the raw bytes of the slice.
     fn as_bytes(&self) -> &[u8];
 
     /// Convert a byte slice to this kind of slice.
     ///
-    /// You may assume the buffer is *already validated*
-    /// for `Format`.
+    /// # Safety
+    /// It assumes the buffer is *already validated* for `Format`.
     unsafe fn from_bytes(x: &[u8]) -> &Self;
 
     /// Convert a byte slice to this kind of slice.
     ///
-    /// You may assume the buffer is *already validated*
-    /// for `Format`.
+    /// # Safety
+    /// It assumes the buffer is *already validated* for `Format`.
     unsafe fn from_mut_bytes(x: &mut [u8]) -> &mut Self;
 }
 
@@ -293,30 +314,29 @@ unsafe impl Format for UTF8 {
 
     #[inline]
     fn validate_prefix(buf: &[u8]) -> bool {
-        if buf.len() == 0 {
+        if buf.is_empty(){
             return true;
         }
-        match futf::classify(buf, buf.len() - 1) {
+        matches!(futf::classify(buf, buf.len() - 1),
             Some(Codepoint {
                 meaning: Meaning::Whole(_),
                 ..
-            }) => true,
-            _ => false,
-        }
+            })
+        )
     }
 
     #[inline]
     fn validate_suffix(buf: &[u8]) -> bool {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return true;
         }
-        match futf::classify(buf, 0) {
+        matches!(
+            futf::classify(buf, 0),
             Some(Codepoint {
                 meaning: Meaning::Whole(_),
                 ..
-            }) => true,
-            _ => false,
-        }
+            })
+        )
     }
 
     #[inline]
@@ -374,10 +394,9 @@ pub struct WTF8;
 
 #[inline]
 fn wtf8_meaningful(m: Meaning) -> bool {
-    match m {
-        Meaning::Whole(_) | Meaning::LeadSurrogate(_) | Meaning::TrailSurrogate(_) => true,
-        _ => false,
-    }
+    matches!(m,  
+        Meaning::Whole(_) | Meaning::LeadSurrogate(_) | Meaning::TrailSurrogate(_)
+    )
 }
 
 unsafe impl Format for WTF8 {
@@ -403,7 +422,7 @@ unsafe impl Format for WTF8 {
 
     #[inline]
     fn validate_prefix(buf: &[u8]) -> bool {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return true;
         }
         match futf::classify(buf, buf.len() - 1) {
@@ -414,7 +433,7 @@ unsafe impl Format for WTF8 {
 
     #[inline]
     fn validate_suffix(buf: &[u8]) -> bool {
-        if buf.len() == 0 {
+        if buf.is_empty() {
             return true;
         }
         match futf::classify(buf, 0) {

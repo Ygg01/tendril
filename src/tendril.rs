@@ -15,7 +15,7 @@ use std::num::NonZeroUsize;
 use std::ops::{Deref, DerefMut};
 use std::sync::atomic::Ordering as AtomicOrdering;
 use std::sync::atomic::{self, AtomicUsize};
-use std::{hash, io, mem, ptr, str, u32};
+use std::{hash, io, mem, ptr, str};
 
 #[cfg(feature = "encoding")]
 use encoding::{self, DecoderTrap, EncoderTrap, EncodingRef};
@@ -24,7 +24,7 @@ use crate::buf32::{self, Buf32};
 use crate::fmt::imp::Fixup;
 use crate::fmt::{self, Slice};
 use crate::util::{copy_and_advance, copy_lifetime, copy_lifetime_mut, unsafe_slice, unsafe_slice_mut};
-use crate::OFLOW;
+use crate::{OFLOW};
 
 const MAX_INLINE_LEN: usize = 8;
 const MAX_INLINE_TAG: usize = 0xF;
@@ -48,6 +48,10 @@ fn inline_tag(len: u32) -> NonZeroUsize {
 ///
 /// The layout of this trait is also mandated to be that of a `usize`,
 /// for it is used for reference counting.
+/// 
+/// # Safety
+/// 
+/// Implementing this trait is unsafe due to different atomic guarantees.
 pub unsafe trait Atomicity: 'static {
     #[doc(hidden)]
     fn new() -> Self;
@@ -464,11 +468,6 @@ where
     fn eq(&self, other: &Self) -> bool {
         self.as_byte_slice() == other.as_byte_slice()
     }
-
-    #[inline]
-    fn ne(&self, other: &Self) -> bool {
-        self.as_byte_slice() != other.as_byte_slice()
-    }
 }
 
 impl<F, A> Eq for Tendril<F, A>
@@ -668,7 +667,7 @@ where
         SendTendril {
             // This changes the header.refcount from A to NonAtomic, but that's
             // OK because we have defined the format of A as a usize.
-            tendril: unsafe { mem::transmute(self) },
+            tendril: unsafe { mem::transmute::<Tendril<F, A>, Tendril<F>>(self) },
         }
     }
 
@@ -699,7 +698,7 @@ where
         Sub: fmt::SubsetOf<F>,
     {
         match Sub::revalidate_subset(self.as_byte_slice()) {
-            true => Ok(unsafe { mem::transmute(self) }),
+            true => Ok(unsafe { mem::transmute::<&Tendril<F, A>, &Tendril<Sub, A>>(self) }),
             false => Err(()),
         }
     }
@@ -711,7 +710,7 @@ where
         Sub: fmt::SubsetOf<F>,
     {
         match Sub::revalidate_subset(self.as_byte_slice()) {
-            true => Ok(unsafe { mem::transmute(self) }),
+            true => Ok(unsafe { mem::transmute::<Tendril<F, A>, Tendril<Sub, A>>(self) }),
             false => Err(self),
         }
     }
@@ -724,7 +723,7 @@ where
         Other: fmt::Format,
     {
         match Other::validate(self.as_byte_slice()) {
-            true => Ok(unsafe { mem::transmute(self) }),
+            true => Ok(unsafe { mem::transmute::<&Tendril<F, A>, &Tendril<Other, A>>(self) }),
             false => Err(()),
         }
     }
@@ -741,7 +740,7 @@ where
         Other: fmt::Format,
     {
         match Other::validate(self.as_byte_slice()) {
-            true => Ok(unsafe { mem::transmute(self) }),
+            true => Ok(unsafe { mem::transmute::<Tendril<F, A>, Tendril<Other, A>>(self) }),
             false => Err(self),
         }
     }
@@ -893,6 +892,10 @@ where
     }
 
     /// View as another format, without validating.
+    /// 
+    /// # Safety
+    /// 
+    /// - Tendril should be in target format, otherwise this fails.
     #[inline(always)]
     pub unsafe fn reinterpret_view_without_validating<Other>(&self) -> &Tendril<Other, A>
     where
@@ -902,6 +905,10 @@ where
     }
 
     /// Convert into another format, without validating.
+    /// 
+    /// # Safety
+    /// 
+    /// - Tendril should be in target format, otherwise it's unsound
     #[inline(always)]
     pub unsafe fn reinterpret_without_validating<Other>(self) -> Tendril<Other, A>
     where
@@ -911,6 +918,11 @@ where
     }
 
     /// Build a `Tendril` by copying a byte slice, without validating.
+    /// 
+    /// # Safety
+    /// 
+    /// - Slice is below 4GiB
+    /// - Its encoding matches Tendril's
     #[inline]
     pub unsafe fn from_byte_slice_without_validating(x: &[u8]) -> Tendril<F, A> {
         assert!(x.len() <= buf32::MAX_LEN);
@@ -922,6 +934,10 @@ where
     }
 
     /// Push some bytes onto the end of the `Tendril`, without validating.
+    /// 
+    /// # Safety
+    /// 
+    /// 
     #[inline]
     pub unsafe fn push_bytes_without_validating(&mut self, buf: &[u8]) {
         assert!(buf.len() <= buf32::MAX_LEN);
@@ -962,7 +978,7 @@ where
             let (owned, _, _) = self.assume_buf();
             let mut dest = owned
                 .data_ptr()
-                .offset((owned.len as usize - drop_left) as isize);
+                .add(owned.len as usize - drop_left);
             copy_and_advance(
                 &mut dest,
                 unsafe_slice(&insert_bytes, 0, insert_len as usize),
@@ -977,7 +993,8 @@ where
 
     /// Slice this `Tendril` as a new `Tendril`.
     ///
-    /// Does not check validity or bounds!
+    /// # Safety 
+    /// Must check validity or bounds!
     #[inline]
     pub unsafe fn unsafe_subtendril(&self, offset: u32, length: u32) -> Tendril<F, A> {
         if length <= MAX_INLINE_LEN as u32 {
@@ -996,7 +1013,8 @@ where
 
     /// Drop `n` bytes from the front.
     ///
-    /// Does not check validity or bounds!
+    /// # Safety
+    /// Must check validity or bounds!
     #[inline]
     pub unsafe fn unsafe_pop_front(&mut self, n: u32) {
         let new_len = self.len32() - n;
@@ -1016,7 +1034,9 @@ where
 
     /// Drop `n` bytes from the back.
     ///
-    /// Does not check validity or bounds!
+    /// # Safety
+    /// 
+    /// Validity and bounds must be checked beforehand.
     #[inline]
     pub unsafe fn unsafe_pop_back(&mut self, n: u32) {
         let new_len = self.len32() - n;
@@ -1059,6 +1079,11 @@ where
         }
     }
 
+    /// Creates an owned buffer with capacity
+    /// 
+    /// # Safety
+    /// * `self.buf` must not be zero
+    /// * can't allocate more than 4GiB of total memory
     #[inline]
     unsafe fn make_owned_with_capacity(&mut self, cap: u32) {
         self.make_owned();
@@ -1072,7 +1097,7 @@ where
     unsafe fn header(&self) -> *mut Header<A> {
         (self.ptr.get().get() & !1) as *mut Header<A>
     }
-
+    
     #[inline]
     unsafe fn assume_buf(&self) -> (Buf32<Header<A>>, bool, u32) {
         let ptr = self.ptr.get().get();
@@ -1087,13 +1112,18 @@ where
             Buf32 {
                 ptr: header,
                 len: offset + self.len32(),
-                cap: cap,
+                cap,
             },
             shared,
             offset,
         )
     }
 
+    /// Create Tendril inline
+    /// 
+    /// # Safety
+    /// 
+    /// - Slice `x` must be below eight bytes
     #[inline]
     unsafe fn inline(x: &[u8]) -> Tendril<F, A> {
         let len = x.len();
@@ -1333,7 +1363,7 @@ where
             let mut chars = unsafe { F::char_indices(self.as_byte_slice()) };
             let (_, first) = unwrap_or_return!(chars.next(), None);
             class = classify(first);
-            first_mismatch = chars.find(|&(_, ch)| &classify(ch) != &class);
+            first_mismatch = chars.find(|&(_, ch)| classify(ch) != class);
         }
 
         match first_mismatch {
@@ -1484,6 +1514,10 @@ where
     /// Really, this grows the tendril without writing anything to the new area.
     /// It's only defined for byte tendrils because it's only useful if you
     /// plan to then mutate the buffer.
+    /// 
+    /// # Safety
+    /// 
+    /// When creating uninitialized bits
     #[inline]
     pub unsafe fn push_uninitialized(&mut self, n: u32) {
         let new_len = self.len32().checked_add(n).expect(OFLOW);
@@ -1631,7 +1665,7 @@ where
 {
     #[inline]
     fn as_ref(&self) -> &F::Slice {
-        &**self
+        self
     }
 }
 

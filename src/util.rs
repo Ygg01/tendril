@@ -11,7 +11,7 @@ use std::{ptr, slice};
 pub unsafe fn unsafe_slice(buf: &[u8], start: usize, new_len: usize) -> &[u8] {
     debug_assert!(start <= buf.len());
     debug_assert!(new_len <= (buf.len() - start));
-    slice::from_raw_parts(buf.as_ptr().offset(start as isize), new_len)
+    slice::from_raw_parts(buf.as_ptr().add(start), new_len)
 }
 
 #[inline(always)]
@@ -22,7 +22,7 @@ pub unsafe fn unsafe_slice_mut(
 ) -> &mut [u8] {
     debug_assert!(start <= buf.len());
     debug_assert!(new_len <= (buf.len() - start));
-    slice::from_raw_parts_mut(buf.as_mut_ptr().offset(start as isize), new_len)
+    slice::from_raw_parts_mut(buf.as_mut_ptr().add(start), new_len)
 }
 
 #[inline(always)]

@@ -75,9 +75,9 @@ impl Byte {
     fn classify(x: u8) -> Option<Byte> {
         match x & 0xC0 {
             0xC0 => match x {
-                x if x & 0b11111_000 == 0b11110_000 => Some(Byte::Start(4)),
+                x if x & 0b1111_1000 == 0b1111_0000 => Some(Byte::Start(4)),
                 x if x & 0b1111_0000 == 0b1110_0000 => Some(Byte::Start(3)),
-                x if x & 0b111_00000 == 0b110_00000 => Some(Byte::Start(2)),
+                x if x & 0b1110_0000 == 0b1100_0000 => Some(Byte::Start(2)),
                 _ => None,
             },
             0x80 => Some(Byte::Cont),
@@ -137,7 +137,7 @@ unsafe fn decode(buf: &[u8]) -> Option<Meaning> {
 unsafe fn unsafe_slice(buf: &[u8], start: usize, new_len: usize) -> &[u8] {
     debug_assert!(start <= buf.len());
     debug_assert!(new_len <= (buf.len() - start));
-    slice::from_raw_parts(buf.as_ptr().offset(start as isize), new_len)
+    slice::from_raw_parts(buf.as_ptr().add(start), new_len)
 }
 
 macro_rules! otry {
@@ -174,9 +174,9 @@ pub fn classify(buf: &[u8], idx: usize) -> Option<Codepoint> {
                     }
                     let meaning = otry!(decode(bytes));
                     Some(Codepoint {
-                        bytes: bytes,
+                        bytes,
                         rewind: 0,
-                        meaning: meaning,
+                        meaning,
                     })
                 } else {
                     Some(Codepoint {
@@ -207,16 +207,14 @@ pub fn classify(buf: &[u8], idx: usize) -> Option<Codepoint> {
                             let avail = buf.len() - start;
                             if avail >= n {
                                 let bytes = unsafe_slice(buf, start, n);
-                                if checked < n {
-                                    if !all_cont(unsafe_slice(bytes, checked, n - checked)) {
-                                        return None;
-                                    }
+                                if checked < n  && !all_cont(unsafe_slice(bytes, checked, n - checked)) {
+                                    return None;
                                 }
                                 let meaning = otry!(decode(bytes));
                                 return Some(Codepoint {
-                                    bytes: bytes,
+                                    bytes,
                                     rewind: idx - start,
-                                    meaning: meaning,
+                                    meaning,
                                 });
                             } else {
                                 return Some(Codepoint {
