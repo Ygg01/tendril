@@ -134,7 +134,7 @@ unsafe fn decode(buf: &[u8]) -> Option<Meaning> {
 }
 
 #[inline(always)]
-unsafe fn unsafe_slice<'a>(buf: &'a [u8], start: usize, new_len: usize) -> &'a [u8] {
+unsafe fn unsafe_slice(buf: &[u8], start: usize, new_len: usize) -> &[u8] {
     debug_assert!(start <= buf.len());
     debug_assert!(new_len <= (buf.len() - start));
     slice::from_raw_parts(buf.as_ptr().offset(start as isize), new_len)
@@ -152,7 +152,7 @@ macro_rules! otry {
 /// Returns `None` if `idx` is out of range, or if `buf` contains invalid UTF-8
 /// in the vicinity of `idx`.
 #[inline]
-pub fn classify<'a>(buf: &'a [u8], idx: usize) -> Option<Codepoint<'a>> {
+pub fn classify(buf: &[u8], idx: usize) -> Option<Codepoint> {
     if idx >= buf.len() {
         return None;
     }

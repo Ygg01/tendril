@@ -64,7 +64,7 @@ pub mod imp {
         inner: iter::Enumerate<slice::Iter<'a, u8>>,
     }
 
-    impl<'a> Iterator for SingleByteCharIndices<'a> {
+    impl Iterator for SingleByteCharIndices<'_> {
         type Item = (usize, char);
 
         #[inline]
@@ -430,7 +430,7 @@ unsafe impl Format for WTF8 {
 
     #[inline]
     unsafe fn fixup(lhs: &[u8], rhs: &[u8]) -> imp::Fixup {
-        const ERR: &'static str = "WTF8: internal error";
+        const ERR: &str = "WTF8: internal error";
 
         if lhs.len() >= 3 && rhs.len() >= 3 {
             if let (
