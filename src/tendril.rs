@@ -24,7 +24,7 @@ use crate::buf32::{self, Buf32};
 use crate::fmt::imp::Fixup;
 use crate::fmt::{self, Slice};
 use crate::util::{copy_and_advance, copy_lifetime, copy_lifetime_mut, unsafe_slice, unsafe_slice_mut};
-use crate::{OFLOW};
+use crate::{Format, OFLOW};
 
 const MAX_INLINE_LEN: usize = 8;
 const MAX_INLINE_TAG: usize = 0xF;
@@ -51,7 +51,7 @@ fn inline_tag(len: u32) -> NonZeroUsize {
 /// 
 /// # Safety
 /// 
-/// Implementing this trait is unsafe due to different atomic guarantees.
+/// When implementing this trait must maintain atomicity invariants.
 pub unsafe trait Atomicity: 'static {
     #[doc(hidden)]
     fn new() -> Self;
@@ -895,7 +895,7 @@ where
     /// 
     /// # Safety
     /// 
-    /// - Tendril should be in target format, otherwise this fails.
+    ///  [`Tendril`] must be safe to transmute into [`Other`]
     #[inline(always)]
     pub unsafe fn reinterpret_view_without_validating<Other>(&self) -> &Tendril<Other, A>
     where
@@ -908,7 +908,7 @@ where
     /// 
     /// # Safety
     /// 
-    /// - Tendril should be in target format, otherwise it's unsound
+    /// [`Tendril`] must be safe to transmute into [`Other`]
     #[inline(always)]
     pub unsafe fn reinterpret_without_validating<Other>(self) -> Tendril<Other, A>
     where
@@ -921,8 +921,8 @@ where
     /// 
     /// # Safety
     /// 
-    /// - Slice is below 4GiB
-    /// - Its encoding matches Tendril's
+    /// - Slice must be below 4GiB
+    /// - Its encoding must matches [`Tendril`]'s
     #[inline]
     pub unsafe fn from_byte_slice_without_validating(x: &[u8]) -> Tendril<F, A> {
         assert!(x.len() <= buf32::MAX_LEN);
@@ -933,11 +933,11 @@ where
         }
     }
 
-    /// Push some bytes onto the end of the `Tendril`, without validating.
+    /// Push some bytes onto the end of the [`Tendril`], without validating.
     /// 
     /// # Safety
     /// 
-    /// 
+    /// Slice must be safe to append to this [`Tendril`]
     #[inline]
     pub unsafe fn push_bytes_without_validating(&mut self, buf: &[u8]) {
         assert!(buf.len() <= buf32::MAX_LEN);
@@ -991,10 +991,11 @@ where
         }
     }
 
-    /// Slice this `Tendril` as a new `Tendril`.
+    /// Slice this [`Tendril`] as a new [`Tendril`]
     ///
     /// # Safety 
-    /// Must check validity or bounds!
+    /// 
+    /// [`Tendril`] bounds must be valid, such that [`Format`] invariants are kept.
     #[inline]
     pub unsafe fn unsafe_subtendril(&self, offset: u32, length: u32) -> Tendril<F, A> {
         if length <= MAX_INLINE_LEN as u32 {
@@ -1517,7 +1518,7 @@ where
     /// 
     /// # Safety
     /// 
-    /// When creating uninitialized bits
+    /// When creating uninitialized bits, must ensure enough capacity is available.
     #[inline]
     pub unsafe fn push_uninitialized(&mut self, n: u32) {
         let new_len = self.len32().checked_add(n).expect(OFLOW);

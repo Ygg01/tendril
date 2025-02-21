@@ -91,7 +91,8 @@ pub mod imp {
 /// It's used with a phantom type parameter of `Tendril`.
 /// 
 /// # Safety
-/// Wrong casting of bytes to str may cause undefined behavior.
+/// 
+/// Format must maintain internal invariants.
 pub unsafe trait Format {
     /// Check whether the buffer is valid for this format.
     fn validate(buf: &[u8]) -> bool;
@@ -143,7 +144,8 @@ pub unsafe trait Format {
 /// for free.
 /// 
 /// # Safety
-/// Inherits safety concerns from [`Format`]
+/// 
+/// Must maintain safety invariants from [`Format`]
 pub unsafe trait SubsetOf<Super>: Format
 where
     Super: Format,
@@ -164,7 +166,7 @@ where
 /// representing exactly the same invariants.
 /// 
 /// # Safety
-/// Inherits safety constraints from [`Format`]
+/// Must maintain safety constraints from [`Format`]
 pub unsafe trait SliceFormat: Format + Sized {
     type Slice: ?Sized + Slice;
 }
@@ -174,7 +176,7 @@ pub unsafe trait SliceFormat: Format + Sized {
 /// 
 /// # Safety
 /// 
-/// Changing format without validation will cause unsoundness.
+/// When changing [`Format`], format invariants must be maintained. 
 pub unsafe trait CharFormat<'a>: Format {
     /// Iterator for characters and their byte indices.
     type Iter: Iterator<Item = (usize, char)>;
@@ -184,7 +186,7 @@ pub unsafe trait CharFormat<'a>: Format {
     /// 
     /// # Safety 
     /// 
-    /// It assumes the buffer is *already validated* for `Format`.
+    /// Must be passed a buffer that is valid for [`Format`].
     unsafe fn char_indices(buf: &'a [u8]) -> Self::Iter;
 
     /// Encode the character as bytes and pass them to a continuation.
@@ -199,7 +201,8 @@ pub unsafe trait CharFormat<'a>: Format {
 /// 
 /// # Safety
 /// 
-/// It manipulates raw data and may transmute a non-UTF [`&[u8]`] into [`str`]
+/// Types that implement [`Slice`] must maintain their format safety. 
+// TODO this trait looks like a safe trait it doesn't maintain any invariants
 pub unsafe trait Slice {
     /// Access the raw bytes of the slice.
     fn as_bytes(&self) -> &[u8];
@@ -207,13 +210,15 @@ pub unsafe trait Slice {
     /// Convert a byte slice to this kind of slice.
     ///
     /// # Safety
-    /// It assumes the buffer is *already validated* for `Format`.
+    /// 
+    /// Must be passed a buffer that is valid for [`Format`]
     unsafe fn from_bytes(x: &[u8]) -> &Self;
 
     /// Convert a byte slice to this kind of slice.
     ///
     /// # Safety
-    /// It assumes the buffer is *already validated* for `Format`.
+    /// 
+    /// Must be passed a buffer that is valid for [`Format`]
     unsafe fn from_mut_bytes(x: &mut [u8]) -> &mut Self;
 }
 
