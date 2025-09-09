@@ -7,12 +7,13 @@
 //! Provides an unsafe owned buffer type, used in implementing `Tendril`.
 
 use std::{mem, ptr, slice};
-
+use std::mem::size_of;
+use std::vec::Vec;
 use crate::OFLOW;
 
 pub const MIN_CAP: u32 = 16;
 
-pub const MAX_LEN: usize = u32::MAX as usize;
+pub const MAX_LEN: usize = u32::max_value() as usize;
 
 /// A buffer points to a header of type `H`, which is followed by `MIN_CAP` or more
 /// bytes of storage.
@@ -111,7 +112,7 @@ mod test {
             assert_eq!(b"Hello", b.data());
 
             b.grow(1337);
-            assert!(b.cap >= 1337);
+            assert_eq!(b.cap >= 1337, true);
             assert_eq!(b"Hello", b.data());
 
             b.destroy();

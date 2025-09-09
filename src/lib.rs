@@ -21,8 +21,7 @@ extern crate utf8;
 
 pub use fmt::Format;
 pub use stream::TendrilSink;
-pub use tendril::{Atomic, Atomicity, NonAtomic, SendTendril};
-pub use tendril::{ByteTendril, ReadExt, SliceExt, StrTendril, SubtendrilError, Tendril};
+pub use crate::tendril::{Atomic, Atomicity, NonAtomic, SendTendril, ByteTendril, ReadExt, SliceExt, StrTendril, SubtendrilError, Tendril};
 pub use utf8_decode::IncompleteUtf8;
 
 pub mod fmt;
